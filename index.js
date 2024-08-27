@@ -39,8 +39,23 @@ async function requestJenkinsJob(jobName, params, headers) {
   };
   await new Promise((resolve, reject) => request(req)
     .on('response', (res) => {
-      core.info(`${JSON.stringify(res.json())}>>> Job is started!`);
-      resolve();
+      let data = '';
+
+      // Accumulate the data chunks
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      // When the entire response is received, parse the JSON and log it
+      res.on('end', () => {
+        try {
+          const jsonResponse = JSON.parse(data);
+          core.info(`${JSON.stringify(jsonResponse, null, 2)} >>> Job is started!`);
+        } catch (error) {
+          core.error('Failed to parse JSON response:', error);
+        }
+        resolve();
+      });
     })
     .on("error", (err) => {
       core.setFailed(err);
