@@ -39,7 +39,7 @@ async function requestJenkinsJob(jobName, params, headers) {
   };
   await new Promise((resolve, reject) => request(req)
     .on('response', (res) => {
-      core.info(`${JSON.stringify(res)}>>> Job is started!`);
+      core.info(`${JSON.stringify(res.json())}>>> Job is started!`);
       resolve();
     })
     .on("error", (err) => {
