@@ -111,7 +111,6 @@ async function waitJenkinsJob(jobName, timestamp, queueItemUrl, headers) {
       }
     }
     let buildData = await getJobStatus(jobName, buildUrl, headers);
-    core.info(`eliya test ${buildData.inProgress} ${buildData.inProgress === false}`)
     
     if (buildData.inProgress === false) {
       core.info("here")
