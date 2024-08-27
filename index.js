@@ -39,7 +39,7 @@ async function requestJenkinsJob(jobName, params, headers) {
   };
   await new Promise((resolve, reject) => request(req)
     .on('response', (res) => {
-      core.info(`>>> Job is started!`);
+      core.info(`${res}>>> Job is started!`);
       resolve();
     })
     .on("error", (err) => {
@@ -119,6 +119,7 @@ async function main() {
 
     // Waiting for job completion
     if (core.getInput('wait') == 'true') {
+      console.log("eliya wait")
       await waitJenkinsJob(jobName, startTs, headers);
     }
   } catch (err) {
