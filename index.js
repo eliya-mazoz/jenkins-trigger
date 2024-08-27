@@ -121,7 +121,7 @@ async function waitJenkinsJob(jobName, timestamp, queueItemUrl, headers) {
       }
     }
 
-    core.info(`>>> Job '${buildData.fullDisplayName}' is executing (Duration: ${buildData.duration}ms, Expected: ${buildData.estimatedDuration}ms), Build status: ${buildData.result}. Sleeping for ${sleepInterval}s...`);
+    core.info(`>>> Job '${buildData.fullDisplayName}' is executing (Duration: ${buildData.duration}ms, Expected: ${buildData.estimatedDuration}ms), Build still running. Sleeping for ${sleepInterval}s...`);
     await sleep(sleepInterval); // API call interval
   }
 }
