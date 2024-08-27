@@ -12,7 +12,7 @@ const sleep = (seconds) => {
   });
 };
 
-async function requestJenkinsJob(jobName, params, headers) {
+async function triggerJenkinsJob(jobName, params, headers) {
   const jenkinsEndpoint = core.getInput('url');
 
   const jsonReq = {
@@ -37,42 +37,40 @@ async function requestJenkinsJob(jobName, params, headers) {
     form: isParameterized ? params : undefined,
     headers: headers
   };
-  await new Promise((resolve, reject) => request(req)
-    .on('response', (res) => {
-      let data = '';
+  return new Promise((resolve, reject) =>
+    request(req, (err, res) => {
+      if (err) {
+        core.setFailed(err);
+        core.error(JSON.stringify(err));
+        clearTimeout(timer);
+        reject();
+        return;
+      }
+      const location = res.headers['location'];
+      if (!location) {
+        const errorMessage = "Failed to find location header in response!";
+        core.setFailed(errorMessage);
+        core.error(errorMessage);
+        clearTimeout(timer);
+        reject();
+        return;
+      }
 
-      // Accumulate the data chunks
-      res.on('data', (chunk) => {
-        data += chunk;
-      });
-
-      // When the entire response is received, parse the JSON and log it
-      res.on('end', () => {
-        try {
-          const jsonResponse = JSON.parse(data);
-          core.info(`${JSON.stringify(jsonResponse, null, 2)} >>> Job is started!`);
-        } catch (error) {
-          core.error('Failed to parse JSON response:', error);
-        }
-        resolve();
-      });
-    })
-    .on("error", (err) => {
-      core.setFailed(err);
-      core.error(JSON.stringify(err));
-      clearTimeout(timer);
-      reject();
+      resolve(location);
     })
   );
 }
 
-async function getJobStatus(jobName, headers) {
-  const jenkinsEndpoint = core.getInput('url');
+async function getJobStatus(jobName, statusUrl, headers) {
+  if (!statusUrl.endsWith('/'))
+    statusUrl += '/';
+
   const req = {
-    method: 'get',
-    url: `${jenkinsEndpoint}/job/${jobName}/lastBuild/api/json`,
+    method: 'GET',
+    url: `${statusUrl}api/json`,
     headers: headers
   }
+
   return new Promise((resolve, reject) =>
       request(req, (err, res, body) => {
         if (err) {
@@ -88,21 +86,42 @@ async function getJobStatus(jobName, headers) {
       })
     );
 }
-async function waitJenkinsJob(jobName, timestamp, headers) {
-  core.info(`>>> Waiting for "${jobName}" ...`);
+
+async function waitJenkinsJob(jobName, timestamp, queueItemUrl, headers) {
+  const sleepInterval = 5;
+  let buildUrl = undefined
+  core.info(`>>> Waiting for '${jobName}' ...`);
   while (true) {
-    let data = await getJobStatus(jobName, headers);
-    if (data.timestamp < timestamp) {
-      core.info(`>>> Job is not started yet... Wait 5 seconds more...`)
-    } else if (data.result == "SUCCESS") {
-      core.info(`>>> Job "${data.fullDisplayName}" successfully completed!`);
-      break;
-    } else if (data.result == "FAILURE" || data.result == "ABORTED") {
-      throw new Error(`Failed job ${data.fullDisplayName}`);
-    } else {
-      core.info(`>>> Current Duration: ${data.duration}. Expected: ${data.estimatedDuration}`);
+    // check the queue until the job is assigned a build number
+    if (!buildUrl) {
+      let queueData = await getJobStatus(jobName, queueItemUrl, headers);
+
+      if (queueData.cancelled)
+        throw new Error(`Job '${jobName}' was cancelled.`);
+
+      if (queueData.executable && queueData.executable.url) {
+        buildUrl = queueData.executable.url;
+        core.info(`>>> Job '${jobName}' started executing. BuildUrl=${buildUrl}`);
+      }
+
+      if (!buildUrl) {
+        core.info(`>>> Job '${jobName}' is queued (Reason: '${queueData.why}'). Sleeping for ${sleepInterval}s...`);
+        await sleep(sleepInterval);
+        continue;
+      }
     }
-    await sleep(5); // API call interval
+
+    let buildData = await getJobStatus(jobName, buildUrl, headers);
+    core.info(`eliya test ${JSON.stringify(buildData)}`)
+    if (buildData.result == "SUCCESS") {
+      core.info(`>>> Job '${buildData.fullDisplayName}' completed successfully with status ${buildData.result}!`);
+      break;
+    } else if (buildData.result == "FAILURE" || buildData.result == "ABORTED" || buildData.result == "UNSTABLE") {
+      throw new Error(`Job '${buildData.fullDisplayName}' failed with status ${buildData.result}.`);
+    }
+
+    core.info(`>>> Job '${buildData.fullDisplayName}' is executing (Duration: ${buildData.duration}ms, Expected: ${buildData.estimatedDuration}ms), Build status: ${buildData.result}. Sleeping for ${sleepInterval}s...`);
+    await sleep(sleepInterval); // API call interval
   }
 }
 
@@ -130,12 +149,11 @@ async function main() {
     }
     
     // POST API call
-    await requestJenkinsJob(jobName, params, headers);
+    let queueItemUrl = await triggerJenkinsJob(jobName, params, headers);
 
     // Waiting for job completion
     if (core.getInput('wait') == 'true') {
-      console.log("eliya wait")
-      await waitJenkinsJob(jobName, startTs, headers);
+      await waitJenkinsJob(jobName, startTs, queueItemUrl, headers);
     }
   } catch (err) {
     core.setFailed(err.message);
