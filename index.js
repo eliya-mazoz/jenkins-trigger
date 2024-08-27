@@ -113,7 +113,6 @@ async function waitJenkinsJob(jobName, timestamp, queueItemUrl, headers) {
     let buildData = await getJobStatus(jobName, buildUrl, headers);
     
     if (buildData.inProgress === false) {
-      core.info("here")
       if (buildData.result == "SUCCESS") {
         core.info(`>>> Job '${buildData.fullDisplayName}' completed successfully with status ${buildData.result}!`);
         break;
