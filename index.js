@@ -14,12 +14,20 @@ const sleep = (seconds) => {
 
 async function triggerJenkinsJob(jobName, params, headers) {
   const jenkinsEndpoint = core.getInput('url');
+  let jobUrl = `${jenkinsEndpoint}/job/${jobName}`;
+
+  // Check if jobName contains somejobname/branchname
+  if (jobName.includes('/')) {
+    const [someJobName, branchName] = jobName.split('/');
+    jobUrl = `${jenkinsEndpoint}/job/${someJobName}/job/${branchName}`;
+  }
 
   const jsonReq = {
     method: 'GET',
-    url: `${jenkinsEndpoint}/job/${jobName}/api/json`,
+    url: `${jobUrl}/api/json`,
     headers: headers
   };
+
   const isParameterized = await new Promise((resolve, reject) => 
     request(jsonReq, (err, res, body) => {
       if (err) {
@@ -31,12 +39,14 @@ async function triggerJenkinsJob(jobName, params, headers) {
       resolve(body.search("ParametersDefinitionProperty") >= 0);
     })
   );
+
   const req = {
     method: 'POST',
-    url: `${jenkinsEndpoint}/job/${jobName}${isParameterized ? '/buildWithParameters' : '/build'}`,
+    url: `${jobUrl}${isParameterized ? '/buildWithParameters' : '/build'}`,
     form: isParameterized ? params : undefined,
     headers: headers
   };
+
   return new Promise((resolve, reject) =>
     request(req, (err, res) => {
       if (err) {
