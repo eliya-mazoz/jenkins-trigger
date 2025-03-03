@@ -48,7 +48,8 @@ async function triggerJenkinsJob(jobName, params, headers) {
       }
       const location = res.headers['location'];
       if (!location) {
-        const errorMessage = "Failed to find location header in response!";
+        
+        const errorMessage = `Failed to find location header in response! returned response: ${res}`;
         core.setFailed(errorMessage);
         core.error(errorMessage);
         clearTimeout(timer);
