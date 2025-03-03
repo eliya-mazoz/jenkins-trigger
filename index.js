@@ -14,16 +14,24 @@ const sleep = (seconds) => {
 
 async function triggerJenkinsJob(jobName, params, headers) {
   const jenkinsEndpoint = core.getInput('url');
+  let jobUrl = `${jenkinsEndpoint}/job/${jobName}`;
+
+  // Check if jobName contains somejobname/branchname
+  if (jobName.includes('/')) {
+    const [someJobName, branchName] = jobName.split('/');
+    jobUrl = `${jenkinsEndpoint}/job/${someJobName}/job/${branchName}`;
+  }
 
   const jsonReq = {
     method: 'GET',
-    url: `${jenkinsEndpoint}/job/${jobName}/api/json`,
+    url: `${jobUrl}/api/json`,
     headers: headers
   };
+
   const isParameterized = await new Promise((resolve, reject) => 
     request(jsonReq, (err, res, body) => {
       if (err) {
-        core.setFailed(err);
+        core.setFailed(JSON.stringify(err));
         core.error(JSON.stringify(err));
         clearTimeout(timer);
         reject();
@@ -31,16 +39,18 @@ async function triggerJenkinsJob(jobName, params, headers) {
       resolve(body.search("ParametersDefinitionProperty") >= 0);
     })
   );
+
   const req = {
     method: 'POST',
-    url: `${jenkinsEndpoint}/job/${jobName}${isParameterized ? '/buildWithParameters' : '/build'}`,
+    url: `${jobUrl}${isParameterized ? '/buildWithParameters' : '/build'}`,
     form: isParameterized ? params : undefined,
     headers: headers
   };
+
   return new Promise((resolve, reject) =>
     request(req, (err, res) => {
       if (err) {
-        core.setFailed(err);
+        core.setFailed(JSON.stringify(err));
         core.error(JSON.stringify(err));
         clearTimeout(timer);
         reject();
@@ -76,12 +86,12 @@ async function getJobStatus(jobName, statusUrl, headers) {
       request(req, (err, res, body) => {
         if (err) {
           clearTimeout(timer);
-          reject(err);
+          reject(JSON.stringify(err));
         }
         try {
         resolve(JSON.parse(body));
         } catch(err) {
-          core.info(`Failed to parse body err: ${err}, body: ${body}`);
+          core.info(`Failed to parse body err: ${JSON.stringify(err)}, body: ${body}`);
           resolve({timestamp: 0}); // try again
         }
       })
@@ -158,8 +168,8 @@ async function main() {
       await waitJenkinsJob(jobName, startTs, queueItemUrl, headers);
     }
   } catch (err) {
-    core.setFailed(err);
-    core.error(err);
+    core.setFailed(JSON.stringify(err));
+    core.error(JSON.stringify(err));
   } finally {
     clearTimeout(timer);
   }
