@@ -157,8 +157,8 @@ async function main() {
       await waitJenkinsJob(jobName, startTs, queueItemUrl, headers);
     }
   } catch (err) {
-    core.setFailed(err.message);
-    core.error(err.message);
+    core.setFailed(err);
+    core.error(err);
   } finally {
     clearTimeout(timer);
   }
